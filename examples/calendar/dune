@@ -1,3 +1,4 @@
 (test
  (name test_calendar)
- (libraries crowbar calendar))
+ (libraries crowbar calendar)
+ (ocamlopt_flags (:standard -afl-instrument)))
