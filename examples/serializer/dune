@@ -1,3 +1,5 @@
 (test
  (name test_serializer)
- (libraries crowbar))
+ (libraries crowbar)
+ (ocamlopt_flags
+  (:standard -afl-instrument)))
