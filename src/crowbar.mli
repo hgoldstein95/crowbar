@@ -114,7 +114,7 @@ val fix : ('a gen -> 'a gen) -> 'a gen
     ]}
     *)
 
-val fix' : (('a -> 'b gen) -> 'a -> 'b gen) -> 'a -> 'b gen
+val fix' : (('a -> 'b gen) -> 'a -> 'b gen) -> init:'a -> 'b gen
 (** [fix' fn x] applies the function [fn] to [x]. This is a version of the [fix]
     combinator above that works when the generator needs a parameter. For example:
 

@@ -39,9 +39,9 @@ let fix f =
   let rec lazygen = lazy (f (unlazy lazygen)) in
   unlazy lazygen
 
-let fix' (f : ('a -> 'b gen) -> 'a -> 'b gen) : 'a -> 'b gen =
+let fix' (f : ('a -> 'b gen) -> 'a -> 'b gen) ~(init : 'a) : 'b gen =
   let rec lazygen x = lazy (f (fun y -> unlazy (lazygen y)) x) in
-  fun x -> unlazy (lazygen x)
+  unlazy (lazygen init)
 
 let map (type f) (type a) (gens : (f, a) gens) (f : f) =
   { strategy = Map (gens, f); small_examples = match gens with [] -> [f] | _ -> [] }
