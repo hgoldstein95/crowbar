@@ -106,7 +106,7 @@ val fix : ('a gen -> 'a gen) -> 'a gen
     {[
       open Crowbar
       type a = A of int | Self of a
-      let rec a_gen = fix (fun a_gen ->
+      let a_gen = fix (fun a_gen ->
           choose [
           map [int] (fun i -> A i);
           map [a_gen] (fun s -> Self s);
