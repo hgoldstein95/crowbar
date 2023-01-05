@@ -1,0 +1,7 @@
+(test
+ (name test_rbt)
+ (libraries crowbar core)
+ (preprocess
+  (pps ppx_jane))
+ (ocamlopt_flags
+  (:standard -afl-instrument)))
