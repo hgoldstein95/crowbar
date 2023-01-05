@@ -114,6 +114,22 @@ val fix : ('a gen -> 'a gen) -> 'a gen
     ]}
     *)
 
+val fix' : (('a -> 'b gen) -> 'a -> 'b gen) -> 'a -> 'b gen
+(** [fix' fn x] applies the function [fn] to [x]. This is a version of the [fix]
+    combinator above that works when the generator needs a parameter. For example:
+
+    {[
+      open Crowbar
+      let int_list_of_length n = fix' (fun self i ->
+        if i = 0 then const []
+        else
+          choose [
+            const [];
+            map [int; self (i - 1)] (fun x xs -> x :: xs)
+          ]) n
+    ]}
+    *)
+
 val const : 'a -> 'a gen
 (** [const a] always generates [a]. *)
 
