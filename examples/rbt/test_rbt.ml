@@ -1,86 +1,83 @@
 open! Core
-
-module Let_syntax = struct
-  type 'a t = 'a Crowbar.gen
-
-  let return = Crowbar.const
-  let bind g ~f = Crowbar.dynamic_bind g f
-end
+module Crowbar = Crowbar_core
 
 let find = Rbt.find ~compare:Int.compare
 let insert = Rbt.insert ~compare:Int.compare
 let invariant = Rbt.invariant ~compare:Int.compare
 
-let cgen_rbt : (int, int) Rbt.t Crowbar.gen =
-  let open Crowbar in
-  let open Let_syntax in
-  fix' ~init:5 (fun self n ->
-      if n = 0 then return Rbt.E
-      else
-        choose
-          [
-            return Rbt.E;
-            (let%bind rb = choose [ const Rbt.B; const Rbt.R ] in
-             let%bind a = self (n - 1) in
-             let%bind x = int in
-             let%bind vx = int in
-             let%bind b = self (n - 1) in
-             return (Rbt.T (rb, a, x, vx, b)));
-          ])
+let pp_rbt ppf t =
+  let rbt_to_string rbt = [%sexp_of: (int, int) Rbt.t] rbt |> Sexp.to_string in
+  Format.fprintf ppf "%s" (rbt_to_string t)
 
-let cgen_rbt_bst : (int, int) Rbt.t Crowbar.gen =
-  let open Crowbar in
-  let open Let_syntax in
-  fix' ~init:(1, 20) (fun self (lo, hi) ->
-      if lo > hi then return Rbt.E
-      else
-        choose
-          [
-            return Rbt.E;
-            (let%bind rb = choose [ const Rbt.B; const Rbt.R ] in
-             let%bind x = range ~min:lo hi in
-             let%bind a = self (lo, x - 1) in
-             let%bind vx = int in
-             let%bind b = self (x + 1, hi) in
-             return (Rbt.T (rb, a, x, vx, b)));
-          ])
+let pp_color ppf = function
+  | Rbt.R -> Format.fprintf ppf "R"
+  | Rbt.B -> Format.fprintf ppf "B"
 
-let cgen_rbt_bst_bal : (int, int) Rbt.t Crowbar.gen =
-  let open Crowbar in
-  let open Let_syntax in
-  let%bind bh = range ~min:1 4 in
-  fix' ~init:(Rbt.R, bh, 1, 20) (fun self (prev_c, bh, lo, hi) ->
-      if lo > hi || bh = 0 then return Rbt.E
-      else
-        let%bind rb =
-          match prev_c with
-          | Rbt.R -> return Rbt.B
-          | Rbt.B -> choose [ const Rbt.B; const Rbt.R ]
-        in
-        let%bind x = range ~min:lo hi in
-        let%bind a = self (rb, bh - 1, lo, x - 1) in
-        let%bind vx = int in
-        let%bind b = self (rb, bh - 1, x + 1, hi) in
-        return (Rbt.T (rb, a, x, vx, b)))
+module Gen_rbt = struct
+  let color =
+    Crowbar.(with_printer pp_color (choose [ const Rbt.B; const Rbt.R ]))
 
-let crowbar_insert_valid (t, k, v) =
+  let naive : (int, int) Rbt.t Crowbar.gen =
+    let open Crowbar in
+    fix' ~init:5 (fun self n ->
+        if n = 0 then return Rbt.E
+        else
+          choose
+            [
+              return Rbt.E;
+              (let open Crowbar.Let_syntax in
+              let%bind rb = color in
+              let%bind x = int in
+              let%bind vx = int in
+              let%bind a = self (n - 1) in
+              let%bind b = self (n - 1) in
+              return (Rbt.T (rb, a, x, vx, b)));
+            ])
+    |> with_printer pp_rbt
+
+  let with_bst_invariant : (int, int) Rbt.t Crowbar.gen =
+    let open Crowbar in
+    fix' ~init:(1, 20) (fun self (lo, hi) ->
+        if lo > hi then return Rbt.E
+        else
+          choose
+            [
+              return Rbt.E;
+              (let open Crowbar.Let_syntax in
+              let%bind rb = color in
+              let%bind x = inc_range ~min:lo ~max:hi in
+              let%bind vx = int in
+              let%bind a = self (lo, x - 1) in
+              let%bind b = self (x + 1, hi) in
+              return (Rbt.T (rb, a, x, vx, b)));
+            ])
+    |> with_printer pp_rbt
+
+  let with_rbt_invariant : (int, int) Rbt.t Crowbar.gen =
+    let open Crowbar in
+    let open Crowbar.Let_syntax in
+    let%bind bh = inc_range ~min:1 ~max:4 in
+    fix' ~init:(Rbt.R, bh, 1, 20) (fun self (parent_rb, bh, lo, hi) ->
+        if lo > hi || bh = 0 then return Rbt.E
+        else
+          let%bind rb =
+            match parent_rb with Rbt.R -> return Rbt.B | Rbt.B -> color
+          in
+          let%bind x = inc_range ~min:lo ~max:hi in
+          let%bind vx = int in
+          let%bind a = self (rb, bh - 1, lo, x - 1) in
+          let%bind b = self (rb, bh - 1, x + 1, hi) in
+          return (Rbt.T (rb, a, x, vx, b)))
+    |> with_printer pp_rbt
+end
+
+let prop_insert_valid (t, k, v) =
   let open Crowbar in
   guard (invariant t);
   let t' = insert ~correct:false t ~key:k ~value:v in
   check (invariant t')
 
-let () =
-  let g =
-    let open Crowbar in
-    let open Let_syntax in
-    let%bind t = cgen_rbt_bst_bal in
-    let%bind k = range ~min:1 20 in
-    let%bind v = range ~min:1 20 in
-    return (t, k, v)
-  in
-  Crowbar.add_test ~name:"insert_valid" [ g ] crowbar_insert_valid
-
-let crowbar_insert_post (t, k, k', v) =
+let prop_insert_post (t, k, k', v) =
   let open Crowbar in
   guard (invariant t);
   let t' = insert ~correct:false t ~key:k ~value:v in
@@ -91,14 +88,25 @@ let crowbar_insert_post (t, k, k', v) =
     check_eq ~pp:(pp_option pp_int) ~eq:[%equal: int option] (find t' ~key:k')
       (find t ~key:k')
 
+let gen = Gen_rbt.with_bst_invariant
+
 let () =
   let g =
-    let open Crowbar in
-    let open Let_syntax in
-    let%bind t = cgen_rbt_bst_bal in
-    let%bind k = range ~min:1 20 in
-    let%bind k' = range ~min:1 20 in
-    let%bind v = range ~min:1 20 in
+    let open Crowbar.Let_syntax in
+    let%bind t = gen in
+    let%bind k = Crowbar.inc_range ~min:1 ~max:20 in
+    let%bind v = Crowbar.int in
+    return (t, k, v)
+  in
+  Crowbar.add_test ~name:"insert_valid" [ g ] prop_insert_valid
+
+let () =
+  let g =
+    let open Crowbar.Let_syntax in
+    let%bind t = gen in
+    let%bind k = Crowbar.inc_range ~min:1 ~max:20 in
+    let%bind k' = Crowbar.inc_range ~min:1 ~max:20 in
+    let%bind v = Crowbar.int in
     return (t, k, k', v)
   in
-  Crowbar.add_test ~name:"insert_post" [ g ] crowbar_insert_post
+  Crowbar.add_test ~name:"insert_post" [ g ] prop_insert_post
