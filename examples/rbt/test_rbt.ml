@@ -53,6 +53,24 @@ module Gen_rbt = struct
             ])
     |> with_printer pp_rbt
 
+  let with_bh_invariant : (int, int) Rbt.t Crowbar.gen =
+    let open Crowbar in
+    let open Crowbar.Let_syntax in
+    let%bind bh = inc_range ~min:1 ~max:4 in
+    fix' ~init:(Rbt.R, bh) (fun self (parent_rb, bh) ->
+        if bh = 0 then return Rbt.E
+        else
+          let%bind rb =
+            match parent_rb with Rbt.R -> return Rbt.B | Rbt.B -> color
+          in
+          let new_bh = match parent_rb with Rbt.R -> bh | Rbt.B -> bh - 1 in
+          let%bind x = inc_range ~min:1 ~max:20 in
+          let%bind vx = int in
+          let%bind a = self (rb, new_bh) in
+          let%bind b = self (rb, new_bh) in
+          return (Rbt.T (rb, a, x, vx, b)))
+    |> with_printer pp_rbt
+
   let with_rbt_invariant : (int, int) Rbt.t Crowbar.gen =
     let open Crowbar in
     let open Crowbar.Let_syntax in
@@ -63,10 +81,11 @@ module Gen_rbt = struct
           let%bind rb =
             match parent_rb with Rbt.R -> return Rbt.B | Rbt.B -> color
           in
+          let new_bh = match parent_rb with Rbt.R -> bh | Rbt.B -> bh - 1 in
           let%bind x = inc_range ~min:lo ~max:hi in
           let%bind vx = int in
-          let%bind a = self (rb, bh - 1, lo, x - 1) in
-          let%bind b = self (rb, bh - 1, x + 1, hi) in
+          let%bind a = self (rb, new_bh, lo, x - 1) in
+          let%bind b = self (rb, new_bh, x + 1, hi) in
           return (Rbt.T (rb, a, x, vx, b)))
     |> with_printer pp_rbt
 end
@@ -81,12 +100,8 @@ let prop_insert_post (t, k, k', v) =
   let open Crowbar in
   guard (invariant t);
   let t' = insert ~correct:false t ~key:k ~value:v in
-  if k = k' then
-    check_eq ~pp:(pp_option pp_int) ~eq:[%equal: int option] (find t' ~key:k')
-      (Some v)
-  else
-    check_eq ~pp:(pp_option pp_int) ~eq:[%equal: int option] (find t' ~key:k')
-      (find t ~key:k')
+  check_eq ~pp:(pp_option pp_int) ~eq:[%equal: int option] (find t' ~key:k')
+    (if k = k' then Some v else find t ~key:k')
 
 let gen = Gen_rbt.with_bst_invariant
 
